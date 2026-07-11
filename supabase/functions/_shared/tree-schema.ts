@@ -14,6 +14,13 @@ const relatedTechSchema = z.object({
   note: z.string(),
 })
 
+const leafSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  description: z.string(),
+  status: z.enum(['todo', 'done']).default('todo'),
+})
+
 const skillNodeSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1),
@@ -23,6 +30,7 @@ const skillNodeSchema = z.object({
   how_to_learn: z.string().min(1),
   evidence: evidenceSchema.nullable(),
   related: z.array(relatedTechSchema).max(4).default([]),
+  leaves: z.array(leafSchema).max(4).default([]),
 })
 
 const milestoneSchema = z.object({

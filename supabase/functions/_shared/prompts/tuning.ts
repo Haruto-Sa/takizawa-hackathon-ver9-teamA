@@ -2,6 +2,6 @@
 export const tuning = {
   // 一部モデルはResponses APIでtemperatureを受け付けないため、undefinedのときは送らない
   temperature: undefined as number | undefined,
-  timeoutMs: 20_000,
+  timeoutMs: 45_000, // 全マイルストーン+葉の生成で出力が大きいため長め
   maxAttempts: 2,
 }

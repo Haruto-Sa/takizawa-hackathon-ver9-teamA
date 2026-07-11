@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react'
-import type { RelatedTech } from '../../shared/schemas/tree'
+import type { Leaf, RelatedTech } from '../../shared/schemas/tree'
 
 export type StartFlowNode = Node<{ goal: string }, 'start'>
 export function StartNode() {
@@ -23,6 +23,14 @@ export function JointNode() {
     <Handle type="source" position={Position.Top} id="top" />
     <Handle type="source" position={Position.Left} id="left" />
     <Handle type="source" position={Position.Right} id="right" />
+  </div>
+}
+
+export type LeafFlowNode = Node<Leaf & { side: 'left' | 'right' }, 'leaf'>
+export function LeafNode({ data }: NodeProps<LeafFlowNode>) {
+  return <div className={`leaf-node ${data.status}`}>
+    <Handle type="target" position={data.side === 'right' ? Position.Left : Position.Right} id="in" />
+    <span>🍃</span><strong>{data.label}</strong>
   </div>
 }
 

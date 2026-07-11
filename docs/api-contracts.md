@@ -3,7 +3,7 @@
 全関数は `Authorization: Bearer <JWT>` を必須とし、入力値と対象データの所有者を照合する。
 
 - `generate-questions`: `{ goal: string, tags: string[] }` → `{ questions: string[1..2] }`
-- `generate-tree`: `{ goal, tags, details, interests }` → `{ id, tree, fallback? }`。treeの各ノードは関連技術 `related: { id, label, note }[]`(0〜4件)を含む。
+- `generate-tree`: `{ goal, tags, details, interests }` → `{ id, tree, fallback? }`。treeの各ノードは葉 `leaves: { id, label, description, status }[]`(2〜4枚)と関連技術 `related: { id, label, note }[]`(0〜4件)を含む。全マイルストーンに枝が2〜4本生成される。
 - `generate-quiz`: `{ tree_id, node_id }` → `{ quiz_id, questions: [{ id, prompt, choices }] }`。正解・解説は返さない。
 - `grade-quiz`: `{ quiz_id, answers: number[] }` → `{ passed, score, explanations, tree? }`
 

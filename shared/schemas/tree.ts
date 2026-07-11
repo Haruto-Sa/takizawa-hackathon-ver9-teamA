@@ -12,6 +12,12 @@ export const relatedTechSchema = z.object({
   label: z.string().min(1),
   note: z.string(),
 })
+export const leafSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  description: z.string(),
+  status: z.enum(['todo', 'done']).default('todo'),
+})
 export const skillNodeSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1),
@@ -21,6 +27,7 @@ export const skillNodeSchema = z.object({
   how_to_learn: z.string().min(1),
   evidence: evidenceSchema.nullable(),
   related: z.array(relatedTechSchema).max(4).default([]),
+  leaves: z.array(leafSchema).max(4).default([]),
 })
 export const milestoneSchema = z.object({
   id: z.string().min(1),
@@ -33,5 +40,6 @@ export const skillTreeSchema = z.object({
   milestones: z.array(milestoneSchema).min(1),
 })
 export type RelatedTech = z.infer<typeof relatedTechSchema>
+export type Leaf = z.infer<typeof leafSchema>
 export type SkillNode = z.infer<typeof skillNodeSchema>
 export type SkillTree = z.infer<typeof skillTreeSchema>

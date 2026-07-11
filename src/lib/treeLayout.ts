@@ -1,9 +1,9 @@
 import type { Edge } from '@xyflow/react'
 import type { SkillNode, SkillTree } from '../../shared/schemas/tree'
 import type { SkillFlowNode } from '../components/SkillNodeCard'
-import type { JointFlowNode, StartFlowNode, SubFlowNode, TrunkFlowNode } from '../components/treeNodes'
+import type { JointFlowNode, LeafFlowNode, StartFlowNode, SubFlowNode, TrunkFlowNode } from '../components/treeNodes'
 
-export type TreeFlowNode = SkillFlowNode | StartFlowNode | TrunkFlowNode | JointFlowNode | SubFlowNode
+export type TreeFlowNode = SkillFlowNode | StartFlowNode | TrunkFlowNode | JointFlowNode | SubFlowNode | LeafFlowNode
 
 // マイルストーンごとに循環するパステルアクセント
 export const ACCENTS = ['#60a5fa', '#f472b6', '#34d399', '#fbbf24', '#a78bfa', '#2dd4bf']
@@ -16,9 +16,14 @@ const START_SIZE = 104
 const JOINT_SIZE = 8
 const SUB_W = 160
 const SUB_H = 52
+const LEAF_W = 138
+const LEAF_H = 34
+const LEAF_GAP = 34 // カード外側エッジから葉ピルまで
+const LEAF_DY = 44
 const BRANCH_DX = 90 // 幹からカード内側エッジまで
-const SUB_GAP = 56 // カード外側エッジからサブピルまで
+const SUB_GAP = 56 // カード外側エッジからサブピルまで(葉がある場合は葉の外側)
 const SUB_DY = 62
+const LEAF_COLOR = '#4ade80'
 const ROW_BASE = 112
 const TRUNK_ROW = 104
 const START_ROW = 136
@@ -66,7 +71,8 @@ export function buildFlow(tree: SkillTree): { nodes: TreeFlowNode[]; edges: Edge
       const side: 'left' | 'right' = sideFlip++ % 2 === 0 ? 'right' : 'left'
       const s = side === 'right' ? 1 : -1
       const k = n.related.length
-      y -= Math.max(ROW_BASE, k * SUB_DY + 40)
+      const kl = n.leaves.length
+      y -= Math.max(ROW_BASE, k * SUB_DY + 40, kl * LEAF_DY + 40)
 
       const jointId = `__j-${n.id}`
       put({ id: jointId, type: 'joint', data: {}, position: { x: 0, y: 0 } }, 0, y, JOINT_SIZE, JOINT_SIZE)
@@ -84,9 +90,22 @@ export function buildFlow(tree: SkillTree): { nodes: TreeFlowNode[]; edges: Edge
       })
 
       const outerX = s * (BRANCH_DX + CARD_W)
+      n.leaves.forEach((l, j) => {
+        const leafId = `leaf-${n.id}-${l.id}`
+        put({ id: leafId, type: 'leaf', data: { ...l, side }, position: { x: 0, y: 0 } }, outerX + s * (LEAF_GAP + LEAF_W / 2), y + (j - (kl - 1) / 2) * LEAF_DY, LEAF_W, LEAF_H)
+        edges.push({
+          id: `l-${leafId}`,
+          source: n.id,
+          sourceHandle: 'out',
+          target: leafId,
+          targetHandle: 'in',
+          style: { stroke: LEAF_COLOR, strokeWidth: 1.5, opacity: 0.8 },
+        })
+      })
+      const subGap = kl > 0 ? LEAF_GAP + LEAF_W + 44 : SUB_GAP
       n.related.forEach((r, j) => {
         const subId = `sub-${n.id}-${r.id}`
-        put({ id: subId, type: 'subskill', data: { ...r, side, accent }, position: { x: 0, y: 0 } }, outerX + s * (SUB_GAP + SUB_W / 2), y + (j - (k - 1) / 2) * SUB_DY, SUB_W, SUB_H)
+        put({ id: subId, type: 'subskill', data: { ...r, side, accent }, position: { x: 0, y: 0 } }, outerX + s * (subGap + SUB_W / 2), y + (j - (k - 1) / 2) * SUB_DY, SUB_W, SUB_H)
         edges.push({
           id: `r-${subId}`,
           source: n.id,

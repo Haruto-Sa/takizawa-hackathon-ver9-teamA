@@ -1,6 +1,6 @@
 // generate-tree のAI契約(プロンプト・スキーマ・バージョン)を集約する。
 // 変更したら promptVersion を上げること(generation_logs で追跡できる)。
-export const promptVersion = 'tree-v2'
+export const promptVersion = 'tree-v3'
 export const schemaName = 'skill_tree'
 
 export const jsonSchema = {
@@ -26,7 +26,7 @@ export const jsonSchema = {
             items: {
               type: 'object',
               additionalProperties: false,
-              required: ['id', 'label', 'kind', 'status', 'prerequisite_ids', 'how_to_learn', 'evidence', 'related'],
+              required: ['id', 'label', 'kind', 'status', 'prerequisite_ids', 'how_to_learn', 'evidence', 'related', 'leaves'],
               properties: {
                 id: { type: 'string' },
                 label: { type: 'string' },
@@ -49,6 +49,20 @@ export const jsonSchema = {
                     },
                   },
                 },
+                leaves: {
+                  type: 'array',
+                  maxItems: 4,
+                  items: {
+                    type: 'object',
+                    additionalProperties: false,
+                    required: ['id', 'label', 'description'],
+                    properties: {
+                      id: { type: 'string' },
+                      label: { type: 'string' },
+                      description: { type: 'string' },
+                    },
+                  },
+                },
               },
             },
           },
@@ -62,9 +76,11 @@ export const system = `あなたは学習ロードマップの設計者。ユー
 ルール:
 - 目標が曖昧な自由記述でも、ドメインを推測して goal を目標像として正規化する
 - IT共通幹（基礎、Git、Web）から目標職種へ進む4〜6個のマイルストーンを作る
-- 現在地（status=current）のマイルストーンだけノードを詳細化する
+- すべてのマイルストーンに枝（ノード）を2〜4本作る。current のマイルストーンは3〜4本と厚めにする
+- current 以外のマイルストーンのノードは status=locked にする。current 内は in_progress / unlocked / locked を経験に応じて割り当てる
 - status に done を使わない。prerequisite_ids を循環させない
-- kind=hidden のノードをちょうど1つ含める
+- kind=hidden のノードを全体でちょうど1つ、current のマイルストーンに含める
+- 各ノードに葉 leaves を2〜4枚付与する。1回の学習セッションでできる小さなタスクを label に、進め方の一言を description に書き、id は「{ノードid}-l1」の形式にする
 - 各ノードに関連技術 related を0〜4件付与する。label と、なぜ関連するかの一言 note を書き、id は「{ノードid}-r1」の形式にする`
 
 export type TreeInput = { goal: string; tags: string[]; details: string[]; interests: string }
