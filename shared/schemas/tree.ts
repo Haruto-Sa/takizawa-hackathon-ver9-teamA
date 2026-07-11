@@ -7,6 +7,11 @@ export const evidenceSchema = z.object({
   passed_at: z.string(),
   detail: z.record(z.string(), z.unknown()),
 })
+export const relatedTechSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  note: z.string(),
+})
 export const skillNodeSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1),
@@ -15,6 +20,7 @@ export const skillNodeSchema = z.object({
   prerequisite_ids: z.array(z.string()),
   how_to_learn: z.string().min(1),
   evidence: evidenceSchema.nullable(),
+  related: z.array(relatedTechSchema).max(4).default([]),
 })
 export const milestoneSchema = z.object({
   id: z.string().min(1),
@@ -26,5 +32,6 @@ export const skillTreeSchema = z.object({
   goal: z.string().min(1),
   milestones: z.array(milestoneSchema).min(1),
 })
+export type RelatedTech = z.infer<typeof relatedTechSchema>
 export type SkillNode = z.infer<typeof skillNodeSchema>
 export type SkillTree = z.infer<typeof skillTreeSchema>

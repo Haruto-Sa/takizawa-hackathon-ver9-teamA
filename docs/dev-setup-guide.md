@@ -25,7 +25,7 @@ npm install -D tailwindcss @tailwindcss/vite typescript
 
 - `vite.config.ts` に Tailwind 4 のプラグインを追加:
   `import tailwindcss from '@tailwindcss/vite'` → `plugins: [react(), tailwindcss()]`
-- `vite.config.ts` に `base: '/<リポジトリ名>/'` を設定。ルーティングはHashRouter
+- `vite.config.ts` に `base: '/takizawa-hackathon-ver9-teamA/'` を設定。ルーティングはHashRouter
 - package.json に `"typecheck": "tsc --noEmit"` と `"test"` スクリプトを追加
 - **インストール完了後は package-lock.json をコミットし、以降は `npm ci` を使う**
   (「バージョン厳守」の正はlockファイル)
@@ -34,8 +34,8 @@ npm install -D tailwindcss @tailwindcss/vite typescript
 ```
 AGENTS.md / CLAUDE.md(@AGENTS.mdをインポート)/ .env.example / .gitignore(.env含む)
 shared/schemas/tree.ts, quiz.ts(zodスキーマの唯一の正)
-docs/skill-tree-project-master-prompt.md  仕様書
-docs/skill-tree-baselines.md              ベースラインデータ(ツリー品質の核。必ず含める)
+docs/skilltree_project_master_prompt.md   仕様書
+docs/skilltree_baselines.md               ベースラインデータ(ツリー品質の核。必ず含める)
 docs/api-contracts.md                     4関数の入出力契約(仕様書6節から転記して固定)
 docs/acceptance-criteria.md               受け入れ基準9項目(仕様書6節から転記)
 docs/demo-fixtures.md                     架空ペルソナ+固定デモツリー(フォールバック用)
@@ -83,9 +83,9 @@ supabase secrets set OPENAI_API_KEY=sk-... OPENAI_MODEL=<モデルID>
 
 ## 5. エージェントの分担(コンフリクト回避)
 
-- **Claude Code**: `/supabase` 全域(マイグレーション、Edge Functions 4本:
-  generate-questions / generate-tree / generate-quiz / grade-quiz)+ `src/lib/`
-- **Codex**: `src/components/` `src/pages/`(オンボーディングUI、ツリー画面、クイズモーダル)
+- **Claude Code**: `/supabase` 全域(マイグレーション、Edge Functions 5本:
+  generate-questions / generate-tree / get-or-generate-leaves / generate-quiz / grade-quiz)+ `src/lib/`
+- **Codex**: `src/components/` `src/pages/`(オンボーディングUI、SkillTreePage 3状態、LeafDetailPanel、DailyLogForm、クイズモーダル)
 - **共有物は `shared/schemas/` のみ**。変更時は必ず人間がレビューし、両エージェントに通知。
   コピーを作らず両側から直接importする(フロントはtsconfigのpaths、
   Edge Functionsは相対import。importが困難な場合のみコピーを許可し、CIで一致チェックを入れる)
@@ -95,18 +95,23 @@ supabase secrets set OPENAI_API_KEY=sk-... OPENAI_MODEL=<モデルID>
 **Claude Codeへ(1回目):**
 ```
 docs/skilltree_project_master_prompt.md と docs/api-contracts.md を読んで全体像を把握して。
-その後、(1) 6節のDBスキーマ(quiz_sessions含む4テーブル+読み取り専用RLS)を
-supabase/migrationsに作成、(2) shared/schemas/tree.ts と quiz.ts をzodで定義、
-(3) generate-questions / generate-tree / generate-quiz / grade-quiz の4本を実装して。
-grade-quizはJWT検証・所有者照合・used_atによる二重送信拒否・1トランザクション更新を必ず入れて。
+その後、(1) 6節のDBスキーマ(7テーブル: profiles/trees/leaves/daily_logs/
+leaf_generations/achievements/quiz_sessions + 最小権限RLS)をsupabase/migrationsに作成、
+(2) shared/schemas/tree.ts と quiz.ts をzodで定義(木・枝・葉の3階層)、
+(3) generate-questions / generate-tree / get-or-generate-leaves / generate-quiz /
+grade-quiz の5本を実装して。get-or-generate-leavesは保存済みならAIを呼ばず、
+request_hashで重複生成を防ぐこと。grade-quizはJWT検証・所有者照合・used_atによる
+二重送信拒否・1トランザクション更新(枝done+木completed判定+unlocked伝播+achievement)を必ず入れて。
 プランを先に見せて。
 ```
 
 **Codexへ(1回目):**
 ```
 AGENTS.mdと docs/skilltree_project_master_prompt.md の4節を読んで。
-オンボーディング4ステップのUIを src/pages/Onboarding.tsx として実装して。
-Step1-2,4は固定UI、Step3だけ generate-questions を呼ぶ。
+(1) オンボーディング4ステップのUI(12職種カード・拡張タグ・深掘り・学習条件)を
+src/pages/Onboarding.tsx として実装。Step1-2,4は固定UI、Step3だけ generate-questions を呼ぶ。
+(2) SkillTreePage.tsx を全体表示/木フォーカス/枝フォーカスの3状態で実装し、
+fitViewでズーム、非関連ノードは薄表示。(3) LeafDetailPanel と DailyLogForm を実装。
 APIは src/lib/api.ts に切り出し、未実装の間は docs/demo-fixtures.md のモックを返して。
 実名を入力させる欄は作らないこと。
 ```
