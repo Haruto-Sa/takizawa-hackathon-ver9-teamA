@@ -34,8 +34,8 @@ npm install -D tailwindcss @tailwindcss/vite typescript
 ```
 AGENTS.md / CLAUDE.md(@AGENTS.mdをインポート)/ .env.example / .gitignore(.env含む)
 shared/schemas/tree.ts, quiz.ts(zodスキーマの唯一の正)
-docs/skilltree_project_master_prompt.md   仕様書
-docs/skilltree_baselines.md               ベースラインデータ(ツリー品質の核。必ず含める)
+docs/skill-tree-project-master-prompt.md  仕様書
+docs/skill-tree-baselines.md              ベースラインデータ(ツリー品質の核。必ず含める)
 docs/api-contracts.md                     4関数の入出力契約(仕様書6節から転記して固定)
 docs/acceptance-criteria.md               受け入れ基準9項目(仕様書6節から転記)
 docs/demo-fixtures.md                     架空ペルソナ+固定デモツリー(フォールバック用)
