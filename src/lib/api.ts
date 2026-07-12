@@ -1,8 +1,9 @@
+import { z } from 'zod'
 import { applyDemoQuizPass, demoTreeV2 } from './demo'
 import { normalizeTree } from './treeAdapter'
 import { ensureAnonymousSession, supabase } from './supabase'
 import { quizResponseSchema, gradeResponseSchema, type GradeResponse, type PublicQuiz } from '../../shared/schemas/quiz'
-import type { SkillTreeV2 } from '../../shared/schemas/tree'
+import { leafV2Schema, type LeafV2, type SkillTreeV2 } from '../../shared/schemas/tree'
 import { activitySummarySchema, type ActivitySummary } from '../../shared/schemas/activity'
 import { analyzeArtifactResponseSchema, type ArtifactAnalysis, type ArtifactMatch, type ArtifactSourceType } from '../../shared/schemas/artifact'
 import { classifyArtifactLocally } from './candidateCore'
@@ -73,6 +74,65 @@ function buildLocalSummary(tree: SkillTreeV2): ActivitySummary {
 export async function summarizeActivity(treeId: string, tree: SkillTreeV2): Promise<ActivitySummary> {
   if (treeId === 'demo') return buildLocalSummary(tree)
   try { return await invoke('summarize-activity', { tree_id: treeId }, activitySummarySchema.parse) } catch { return buildLocalSummary(tree) }
+}
+
+// ---------------------------------------------------------------------------
+// ツリー・葉・日次記録
+// ---------------------------------------------------------------------------
+
+export async function getTree(treeId: string): Promise<{ tree: SkillTreeV2; leaves: LeafV2[] } | null> {
+  if (treeId === 'demo') return null
+  try {
+    return await invoke('get-tree', { tree_id: treeId }, (v) => {
+      const r = v as { tree?: unknown; leaves?: unknown }
+      return { tree: normalizeTree(r.tree, { id: treeId }), leaves: z.array(leafV2Schema).parse(r.leaves ?? []) }
+    })
+  } catch { return null }
+}
+
+function demoLeafTemplates(branchId: string, label: string): LeafV2[] {
+  const mk = (i: number, l: string, d: string, c: string, m: number): LeafV2 => ({ id: `${branchId}-l${i}`, branch_id: branchId, label: l, description: d, completion_condition: c, estimated_minutes: m, status: 'todo', progress: 0, evidence_count: 0 })
+  return [
+    mk(1, `${label}の基本を1つ試す`, '入門記事を1本読み、例を手元で動かす', '動いた結果をメモに残す', 30),
+    mk(2, '小さな練習問題を解く', '学んだ内容の演習を1〜2問解く', '解答と気づきをメモする', 30),
+    mk(3, '学んだことを3行でまとめる', '自分の言葉で要約する', '3行のまとめを書き終える', 15),
+    mk(4, '実際のコードに適用してみる', 'サンドボックスで使ってみる', '動くコードを保存する', 45),
+    mk(5, 'ミニ成果物を作って保存する', '学んだ範囲で小さな成果物を作る', 'GitHubかメモに保存する', 60),
+  ]
+}
+
+export async function getOrGenerateLeaves(treeId: string, branchId: string, branchLabel: string): Promise<{ leaves: LeafV2[]; generated: boolean }> {
+  if (treeId === 'demo') {
+    await new Promise((r) => setTimeout(r, 700))
+    return { leaves: demoLeafTemplates(branchId, branchLabel), generated: true }
+  }
+  try {
+    return await invoke('get-or-generate-leaves', { tree_id: treeId, branch_id: branchId }, (v) => {
+      const r = v as { leaves?: unknown; generated?: unknown }
+      return { leaves: z.array(leafV2Schema).parse(r.leaves ?? []), generated: Boolean(r.generated) }
+    })
+  } catch { return { leaves: demoLeafTemplates(branchId, branchLabel), generated: true } }
+}
+
+export type RecordDailyLogInput = { treeId: string; branchId: string; leafId?: string; note: string; studiedMinutes: number; completed: boolean }
+
+// サーバー(record-daily-log)を優先。失敗時は呼び出し側でローカル反映にフォールバックする。
+export async function recordDailyLog(input: RecordDailyLogInput): Promise<{ tree: SkillTreeV2; leaf: LeafV2 | null; updatedNodeIds: string[] }> {
+  return invoke('record-daily-log', {
+    tree_id: input.treeId,
+    branch_id: input.branchId,
+    leaf_id: input.leafId,
+    note: input.note,
+    studied_minutes: input.studiedMinutes,
+    completed: input.completed,
+  }, (v) => {
+    const r = v as { tree?: unknown; leaf?: unknown; updated_node_ids?: unknown }
+    return {
+      tree: normalizeTree(r.tree, { id: input.treeId }),
+      leaf: r.leaf ? leafV2Schema.parse(r.leaf) : null,
+      updatedNodeIds: z.array(z.string()).parse(r.updated_node_ids ?? []),
+    }
+  })
 }
 
 // ---------------------------------------------------------------------------

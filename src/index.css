@@ -18,6 +18,8 @@
 .onboarding input::placeholder,.onboarding textarea::placeholder{color:#5c7a91}
 .onboarding textarea{min-height:90px;resize:vertical}
 .onboarding footer{display:flex;justify-content:flex-end;gap:12px;margin-top:32px}
+.cond-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 18px}
+@media(max-width:700px){.cond-grid{grid-template-columns:1fr}}
 .primary,.back,.reset{border:0;border-radius:10px;padding:13px 22px;font-weight:800}
 .primary{background:#0ea5b7;color:white;box-shadow:0 7px 18px #0ea5b74d}
 .primary:disabled{opacity:.45;cursor:not-allowed}

@@ -35,9 +35,7 @@ export const demoTree: SkillTree = {
         { id: 'git-basic-l1', label: '初めてのcommit', description: 'メッセージの書き方も学ぶ', status: 'todo' },
         { id: 'git-basic-l2', label: 'リポジトリをpush', description: 'GitHubに公開してみる', status: 'todo' },
       ] },
-      { id: 'editor', label: 'エディタ活用', kind: 'normal', status: 'locked', prerequisite_ids: ['git-basic'], how_to_learn: 'VS Codeのショートカットと拡張機能に慣れよう。', evidence: null, related: [], leaves: [
-        { id: 'editor-l1', label: 'ショートカット5個習得', description: '検索・置換・複数カーソル', status: 'todo' },
-      ] },
+      { id: 'editor', label: 'エディタ活用', kind: 'normal', status: 'locked', prerequisite_ids: ['git-basic'], how_to_learn: 'VS Codeのショートカットと拡張機能に慣れよう。', evidence: null, related: [], leaves: [] },
     ]},
     { id: 'm3', label: 'Webの仕組み', status: 'locked', nodes: [
       { id: 'http', label: 'HTTPとブラウザ', kind: 'normal', status: 'locked', prerequisite_ids: ['editor'], how_to_learn: '開発者ツールでリクエストの流れを観察しよう。', evidence: null, related: [
