@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { generateQuestions, generateTree } from '../lib/api'
-import type { SkillTree } from '../../shared/schemas/tree'
+import type { SkillTreeV2 } from '../../shared/schemas/tree'
 
 const goals = ['フロントエンドエンジニア', 'バックエンドエンジニア', 'AI・データ系エンジニア', 'UI/UXデザイナー']
 const tagOptions = ['HTML/CSS', 'JavaScript', 'TypeScript', 'React', 'Python', 'Java', 'Git/GitHub', 'Figma']
-export function Onboarding({ onComplete }: { onComplete: (id: string, tree: SkillTree) => void }) {
+export function Onboarding({ onComplete }: { onComplete: (id: string, tree: SkillTreeV2) => void }) {
   const [step, setStep] = useState(1); const [goal, setGoal] = useState(goals[0]); const [customGoal, setCustomGoal] = useState('')
   const [tags, setTags] = useState<string[]>([]); const [period, setPeriod] = useState('未経験〜3か月'); const [questions, setQuestions] = useState<string[]>([])
   const [details, setDetails] = useState<string[]>([]); const [interest, setInterest] = useState(''); const [loading, setLoading] = useState(false); const [error, setError] = useState('')

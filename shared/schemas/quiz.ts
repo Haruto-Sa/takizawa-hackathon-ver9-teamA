@@ -16,3 +16,4 @@ export const gradeResponseSchema = z.object({
   tree: z.unknown().optional(),
 })
 export type PublicQuiz = z.infer<typeof quizResponseSchema>
+export type GradeResponse = z.infer<typeof gradeResponseSchema>
