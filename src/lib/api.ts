@@ -4,6 +4,10 @@ import { ensureAnonymousSession, supabase } from './supabase'
 import { quizResponseSchema, gradeResponseSchema, type GradeResponse, type PublicQuiz } from '../../shared/schemas/quiz'
 import type { SkillTreeV2 } from '../../shared/schemas/tree'
 import { activitySummarySchema, type ActivitySummary } from '../../shared/schemas/activity'
+import { analyzeArtifactResponseSchema, type ArtifactAnalysis, type ArtifactMatch, type ArtifactSourceType } from '../../shared/schemas/artifact'
+import { classifyArtifactLocally } from './candidateCore'
+import { applyMatches, tierMatches } from './progressCore'
+import { detectSecrets, maskSecrets } from './artifactRules'
 
 async function invoke<T>(name: string, body: Record<string, unknown>, parse: (value: unknown) => T): Promise<T> {
   await ensureAnonymousSession()
@@ -69,4 +73,64 @@ function buildLocalSummary(tree: SkillTreeV2): ActivitySummary {
 export async function summarizeActivity(treeId: string, tree: SkillTreeV2): Promise<ActivitySummary> {
   if (treeId === 'demo') return buildLocalSummary(tree)
   try { return await invoke('summarize-activity', { tree_id: treeId }, activitySummarySchema.parse) } catch { return buildLocalSummary(tree) }
+}
+
+// ---------------------------------------------------------------------------
+// 投稿(成果物・学習メモ・差分)のAI整理
+// サーバーの analyze-artifact を優先し、未接続・失敗時はローカル簡易分類器で判定する。
+// ---------------------------------------------------------------------------
+
+export type AnalyzeArtifactInput = {
+  treeId: string
+  tree: SkillTreeV2
+  source_type: ArtifactSourceType
+  title?: string
+  note?: string
+  text: string
+  focusedBranchId?: string
+}
+
+export type AnalyzeArtifactResult = {
+  analysis: ArtifactAnalysis
+  autoApplied: ArtifactMatch[]
+  needsConfirm: ArtifactMatch[]
+  tree: SkillTreeV2
+  updatedNodeIds: string[]
+  source: 'server' | 'local'
+}
+
+function analyzeLocally(input: AnalyzeArtifactInput): AnalyzeArtifactResult {
+  const masked = maskSecrets(input.text)
+  const analysis = classifyArtifactLocally(input.tree, { text: `${input.note ?? ''}\n${masked}`, focusedBranchId: input.focusedBranchId })
+  const secrets = detectSecrets(input.text)
+  if (secrets.length > 0) analysis.warnings = [...analysis.warnings, `秘密情報らしき文字列(${secrets.join('、')})を検出したためマスクしました`]
+  const { auto, needsConfirm } = tierMatches(analysis.matches)
+  const applied = applyMatches(input.tree, auto)
+  return { analysis, autoApplied: auto, needsConfirm, tree: applied.tree, updatedNodeIds: applied.updatedNodeIds, source: 'local' }
+}
+
+export async function analyzeArtifact(input: AnalyzeArtifactInput): Promise<AnalyzeArtifactResult> {
+  if (input.treeId === 'demo') return analyzeLocally(input)
+  try {
+    const res = await invoke('analyze-artifact', {
+      tree_id: input.treeId,
+      focused_branch_id: input.focusedBranchId,
+      source_type: input.source_type,
+      title: input.title,
+      note: input.note,
+      text_content: input.text,
+    }, analyzeArtifactResponseSchema.parse)
+    const tree = res.tree ? normalizeTree(res.tree, { id: input.treeId }) : input.tree
+    const applied = res.analysis.matches.filter((m) => m.confidence >= 0.85)
+    return { analysis: res.analysis, autoApplied: applied, needsConfirm: res.needs_confirmation, tree, updatedNodeIds: res.updated_node_ids, source: 'server' }
+  } catch {
+    return analyzeLocally(input)
+  }
+}
+
+// 中確信度マッチのユーザー確認。サーバー未接続時はローカル反映。
+export async function confirmArtifactMatch(treeId: string, tree: SkillTreeV2, match: ArtifactMatch): Promise<{ tree: SkillTreeV2; updatedNodeIds: string[] }> {
+  // TODO(backend): confirm-artifact-match Edge Function 接続(重複反映防止はサーバー側で行う)
+  void treeId
+  return applyMatches(tree, [match])
 }

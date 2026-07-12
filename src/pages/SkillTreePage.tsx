@@ -9,12 +9,17 @@ import { TreeBreadcrumbs } from '../components/tree/TreeBreadcrumbs'
 import { TrunkDetailPanel } from '../components/tree/TrunkDetailPanel'
 import { BranchDetailPanel } from '../components/tree/BranchDetailPanel'
 import { LeafDetailPanel } from '../components/learning/LeafDetailPanel'
+import { ArtifactInputPanel } from '../components/learning/ArtifactInputPanel'
+import type { DailyLogFormInput } from '../components/learning/DailyLogForm'
 import { QuizModal } from '../components/QuizModal'
 import { ReviewModal } from '../components/ReviewModal'
+import { TreeMark } from '../components/TreeMark'
 import { buildFlow, type TreeFlowNode } from '../lib/treeLayout'
 import { normalizeTree } from '../lib/treeAdapter'
+import { computeLeafUpdate, recalcTree } from '../lib/progressCore'
 import { currentTrunk, findBranch, findLeaf, findTrunk, overallProgress } from '../lib/treeSelectors'
 import { useTreeNavigation } from '../hooks/useTreeNavigation'
+import { useGrowthFlash } from '../hooks/useGrowthFlash'
 
 const nodeTypes = { branch: BranchNodeCard, trunk: TrunkNode, start: StartNode, joint: JointNode, subskill: SubSkillNode, leaf: LeafNode }
 const prefersReducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -23,9 +28,11 @@ export function SkillTreePage({ treeId, initialTree, onReset }: { treeId: string
   const [tree, setTree] = useState(initialTree)
   const [quiz, setQuiz] = useState(false)
   const [review, setReview] = useState(false)
+  const [post, setPost] = useState(false)
   const [rf, setRf] = useState<ReactFlowInstance<TreeFlowNode> | null>(null)
   const { view, setView, focusTrunk, focusBranch, focusLeaf, back, breadcrumbs } = useTreeNavigation(tree)
-  const flow = useMemo(() => buildFlow(tree, view), [tree, view])
+  const { recentlyUpdatedIds, flash } = useGrowthFlash()
+  const flow = useMemo(() => buildFlow(tree, view, { recentlyUpdatedIds }), [tree, view, recentlyUpdatedIds])
   const rate = overallProgress(tree)
   const trunk = view.mode !== 'overview' ? findTrunk(tree, view.trunkId) : undefined
   const branch = view.mode === 'branch' || view.mode === 'leaf' ? findBranch(tree, view.branchId) : undefined
@@ -60,7 +67,29 @@ export function SkillTreePage({ treeId, initialTree, onReset }: { treeId: string
   }
 
   const handleQuizPassed = (result: GradeResponse) => {
-    if (result.tree) setTree(normalizeTree(result.tree, { id: treeId }))
+    if (result.tree) {
+      setTree(normalizeTree(result.tree, { id: treeId }))
+      flash(result.updated_node_ids ?? (branch ? [branch.id] : []))
+    }
+  }
+
+  // 日次記録。TODO(backend): record-daily-log Edge Function 接続(現状はフロント先行のローカル反映)
+  const handleDailyLog = async (input: DailyLogFormInput) => {
+    if (!branch || !leaf) return
+    const updatedLeaf = computeLeafUpdate(leaf, { studied_minutes: input.studiedMinutes, completed: input.completed })
+    const withLeaf: SkillTreeV2 = {
+      ...tree,
+      trunks: tree.trunks.map((t) => ({
+        ...t,
+        branches: t.branches.map((b) => b.id === branch.id
+          ? { ...b, leaves: (b.leaves ?? []).map((l) => (l.id === leaf.id ? updatedLeaf : l)) }
+          : b),
+      })),
+    }
+    const branchLeaves = withLeaf.trunks.flatMap((t) => t.branches).find((b) => b.id === branch.id)?.leaves ?? []
+    const { tree: next, changedIds } = recalcTree(withLeaf, new Map([[branch.id, branchLeaves]]))
+    setTree(next)
+    flash([leaf.id, ...changedIds])
   }
 
   const panelMotion = {
@@ -72,8 +101,9 @@ export function SkillTreePage({ treeId, initialTree, onReset }: { treeId: string
 
   return <main className="tree-page">
     <header className="app-header">
-      <div className="brand"><span className="brand-mark">↗</span> SKILL PATH</div>
+      <div className="brand"><TreeMark /> PorTree</div>
       <div className="goal"><small>YOUR GOAL</small><strong>{tree.goal.title}</strong></div>
+      <button className="post-btn" onClick={() => setPost(true)}>＋ 投稿</button>
       <button className="reset" onClick={() => setReview(true)}>振り返り</button>
       <button className="reset" onClick={onReset}>最初から</button>
     </header>
@@ -101,9 +131,13 @@ export function SkillTreePage({ treeId, initialTree, onReset }: { treeId: string
         <BranchDetailPanel branch={branch} onChallenge={() => setQuiz(true)} onFocusLeaf={(lid) => focusLeaf(branch.trunk_id, branch.id, lid)} onClose={back} />
       </motion.aside>}
       {view.mode === 'leaf' && branch && leaf && <motion.aside className="detail open" key={`leaf-${leaf.id}`} {...panelMotion}>
-        <LeafDetailPanel leaf={leaf} branch={branch} onClose={back} />
+        <LeafDetailPanel leaf={leaf} branch={branch} onDailyLog={handleDailyLog} onClose={back} />
       </motion.aside>}
     </AnimatePresence>
+    {post && <ArtifactInputPanel treeId={treeId} tree={tree}
+      focusedBranchId={view.mode === 'branch' || view.mode === 'leaf' ? view.branchId : undefined}
+      onApplied={(nextTree, ids) => { setTree(nextTree); flash(ids) }}
+      onClose={() => setPost(false)} />}
     {quiz && branch && <QuizModal treeId={treeId} nodeId={branch.id} label={branch.label} tree={tree} onClose={() => setQuiz(false)} onPassed={handleQuizPassed} />}
     {review && <ReviewModal treeId={treeId} tree={tree} onClose={() => setReview(false)} />}
   </main>
