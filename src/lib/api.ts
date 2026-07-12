@@ -188,9 +188,16 @@ export async function analyzeArtifact(input: AnalyzeArtifactInput): Promise<Anal
   }
 }
 
-// 中確信度マッチのユーザー確認。サーバー未接続時はローカル反映。
+// 中確信度マッチのユーザー確認。サーバー(confirm-artifact-match)が二重反映を防止する。
+// match_id が無い(ローカル分類)場合とサーバー障害時はローカル反映。
 export async function confirmArtifactMatch(treeId: string, tree: SkillTreeV2, match: ArtifactMatch): Promise<{ tree: SkillTreeV2; updatedNodeIds: string[] }> {
-  // TODO(backend): confirm-artifact-match Edge Function 接続(重複反映防止はサーバー側で行う)
-  void treeId
+  if (treeId !== 'demo' && match.match_id) {
+    try {
+      return await invoke('confirm-artifact-match', { match_id: match.match_id, accept: true }, (v) => {
+        const r = v as { tree?: unknown; updated_node_ids?: unknown }
+        return { tree: normalizeTree(r.tree, { id: treeId }), updatedNodeIds: z.array(z.string()).parse(r.updated_node_ids ?? []) }
+      })
+    } catch { /* fall through to local */ }
+  }
   return applyMatches(tree, [match])
 }

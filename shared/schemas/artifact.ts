@@ -4,6 +4,7 @@ export const artifactSourceTypeSchema = z.enum(['note', 'url', 'diff', 'file'])
 export type ArtifactSourceType = z.infer<typeof artifactSourceTypeSchema>
 
 export const artifactMatchSchema = z.object({
+  match_id: z.string().optional(),
   trunk_id: z.string().min(1),
   branch_id: z.string().min(1),
   leaf_id: z.string().optional(),

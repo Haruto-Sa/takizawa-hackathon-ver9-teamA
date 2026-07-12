@@ -1,4 +1,5 @@
 import type { Branch, LeafV2, SkillTreeV2, Trunk } from './tree-schema.ts'
+import type { CandidateNode } from './candidates.ts'
 
 // 進捗計算の純関数群。src/lib/progressCore.ts のミラー。変更時は同期すること。
 // ルール:
@@ -78,4 +79,95 @@ export function buildLeafProgressEvents(before: LeafV2, after: LeafV2, sourceTyp
     after_progress: after.progress,
     detail: { status: after.status },
   }]
+}
+
+// ---------------------------------------------------------------------------
+// 成果物分類の検証・反映(サーバー側の正)
+// ---------------------------------------------------------------------------
+
+export type ArtifactMatchInput = {
+  trunk_id: string
+  branch_id: string
+  leaf_id?: string
+  confidence: number
+  progress_delta: number
+  completion_supported: boolean
+  reason: string
+  evidence_excerpt?: string
+  tags: string[]
+}
+
+// AI返却の検証: 候補に存在するIDのみ許可、locked枝を除外、deltaを0-30にクランプ、合計50以下に縮尺
+export function validateAnalysisMatches(raw: ArtifactMatchInput[], candidates: CandidateNode[], tree: SkillTreeV2): { valid: ArtifactMatchInput[]; dropped: string[] } {
+  const candidateKeys = new Set(candidates.map((c) => (c.leaf_id ? `${c.trunk_id}/${c.branch_id}/${c.leaf_id}` : `${c.trunk_id}/${c.branch_id}`)))
+  const branches = new Map(tree.trunks.flatMap((t) => t.branches).map((b) => [b.id, b]))
+  const dropped: string[] = []
+  let valid = raw.filter((m) => {
+    const leafId = m.leaf_id && m.leaf_id.length > 0 ? m.leaf_id : undefined
+    const key = leafId ? `${m.trunk_id}/${m.branch_id}/${leafId}` : `${m.trunk_id}/${m.branch_id}`
+    const branch = branches.get(m.branch_id)
+    if (!candidateKeys.has(key) || !branch || branch.status === 'locked' || !branch.revealed) {
+      dropped.push(key)
+      return false
+    }
+    return true
+  }).map((m) => ({ ...m, leaf_id: m.leaf_id && m.leaf_id.length > 0 ? m.leaf_id : undefined, progress_delta: Math.max(0, Math.min(30, Math.round(m.progress_delta))) }))
+  const total = valid.reduce((s, m) => s + m.progress_delta, 0)
+  if (total > 50) {
+    const scale = 50 / total
+    valid = valid.map((m) => ({ ...m, progress_delta: Math.floor(m.progress_delta * scale) }))
+  }
+  return { valid, dropped }
+}
+
+export function tierMatches<T extends { confidence: number }>(matches: T[]): { auto: T[]; needsConfirm: T[]; recordOnly: T[] } {
+  return {
+    auto: matches.filter((m) => m.confidence >= 0.85),
+    needsConfirm: matches.filter((m) => m.confidence >= 0.6 && m.confidence < 0.85),
+    recordOnly: matches.filter((m) => m.confidence < 0.6),
+  }
+}
+
+// 成果物マッチの反映。枝doneは設定しない(99上限)。葉は95上限でdoing。
+export function applyMatchesServer(
+  tree: SkillTreeV2,
+  leavesByBranch: Map<string, LeafV2[]>,
+  matches: ArtifactMatchInput[],
+  submissionId: string,
+  now = new Date().toISOString(),
+): { tree: SkillTreeV2; leafUpserts: LeafV2[]; events: ProgressEventInput[]; updatedNodeIds: string[] } {
+  const updatedNodeIds: string[] = []
+  const leafUpserts: LeafV2[] = []
+  const events: ProgressEventInput[] = []
+  let trunks = tree.trunks
+  for (const m of matches) {
+    trunks = trunks.map((t) => {
+      if (t.id !== m.trunk_id) return t
+      const branches = t.branches.map((b): Branch => {
+        if (b.id !== m.branch_id || b.status === 'locked' || b.status === 'done') return b
+        const progress = Math.min(99, b.progress + m.progress_delta)
+        const status = b.status === 'unlocked' && progress > 0 ? 'in_progress' as const : b.status
+        const evidence = [...b.evidence, { id: `${b.id}-artifact-${submissionId.slice(0, 8)}-${events.length}`, type: 'artifact' as const, verified: false, created_at: now }]
+        updatedNodeIds.push(b.id)
+        events.push({ node_type: 'branch', node_id: b.id, source_type: 'artifact', source_id: submissionId, progress_delta: progress - b.progress, before_progress: b.progress, after_progress: progress, detail: { confidence: m.confidence } })
+        if (m.leaf_id) {
+          const rows = leavesByBranch.get(b.id) ?? []
+          const leaf = rows.find((l) => l.id === m.leaf_id)
+          if (leaf && leaf.status !== 'done') {
+            const updated: LeafV2 = { ...leaf, progress: Math.min(95, leaf.progress + m.progress_delta * 2), status: 'doing', evidence_count: leaf.evidence_count + 1, recently_updated_at: now }
+            leafUpserts.push(updated)
+            leavesByBranch.set(b.id, rows.map((l) => (l.id === m.leaf_id ? updated : l)))
+            updatedNodeIds.push(leaf.id)
+            events.push({ node_type: 'leaf', node_id: leaf.id, source_type: 'artifact', source_id: submissionId, progress_delta: updated.progress - leaf.progress, before_progress: leaf.progress, after_progress: updated.progress, detail: {} })
+          }
+        }
+        return { ...b, progress, status, evidence }
+      })
+      const next: Trunk = { ...t, branches }
+      const progress = computeTrunkProgress(next)
+      if (progress !== t.progress) updatedNodeIds.push(t.id)
+      return { ...next, progress }
+    })
+  }
+  return { tree: { ...tree, trunks }, leafUpserts, events, updatedNodeIds: [...new Set(updatedNodeIds)] }
 }
