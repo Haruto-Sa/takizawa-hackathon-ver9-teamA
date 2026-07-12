@@ -1,4 +1,5 @@
-import type { SkillTree } from '../../shared/schemas/tree'
+import type { SkillTree, SkillTreeV2 } from '../../shared/schemas/tree'
+import { normalizeTree } from './treeAdapter'
 
 export const demoTree: SkillTree = {
   goal: 'フロントエンドエンジニア',
@@ -34,9 +35,7 @@ export const demoTree: SkillTree = {
         { id: 'git-basic-l1', label: '初めてのcommit', description: 'メッセージの書き方も学ぶ', status: 'todo' },
         { id: 'git-basic-l2', label: 'リポジトリをpush', description: 'GitHubに公開してみる', status: 'todo' },
       ] },
-      { id: 'editor', label: 'エディタ活用', kind: 'normal', status: 'locked', prerequisite_ids: ['git-basic'], how_to_learn: 'VS Codeのショートカットと拡張機能に慣れよう。', evidence: null, related: [], leaves: [
-        { id: 'editor-l1', label: 'ショートカット5個習得', description: '検索・置換・複数カーソル', status: 'todo' },
-      ] },
+      { id: 'editor', label: 'エディタ活用', kind: 'normal', status: 'locked', prerequisite_ids: ['git-basic'], how_to_learn: 'VS Codeのショートカットと拡張機能に慣れよう。', evidence: null, related: [], leaves: [] },
     ]},
     { id: 'm3', label: 'Webの仕組み', status: 'locked', nodes: [
       { id: 'http', label: 'HTTPとブラウザ', kind: 'normal', status: 'locked', prerequisite_ids: ['editor'], how_to_learn: '開発者ツールでリクエストの流れを観察しよう。', evidence: null, related: [
@@ -66,4 +65,24 @@ export const demoTree: SkillTree = {
       ] },
     ]},
   ],
+}
+
+export const demoTreeV2: SkillTreeV2 = normalizeTree(demoTree, { id: 'demo' })
+
+// デモ用: クイズ合格をサーバーと同じ形(更新後ツリーを返す)で再現する純関数
+export function applyDemoQuizPass(tree: SkillTreeV2, branchId: string): SkillTreeV2 {
+  const now = new Date().toISOString()
+  const trunks = tree.trunks.map((t) => {
+    let branches = t.branches.map((b) => b.id === branchId
+      ? { ...b, status: 'done' as const, progress: 100, evidence: [...b.evidence, { id: `${b.id}-quiz-${now}`, type: 'quiz' as const, verified: true, created_at: now }] }
+      : b)
+    branches = branches.map((b) => b.status === 'locked' && b.prerequisite_ids.length > 0 && b.prerequisite_ids.every((id) => branches.find((x) => x.id === id)?.status === 'done')
+      ? { ...b, status: 'unlocked' as const }
+      : b)
+    const core = branches.filter((b) => b.kind === 'core')
+    const progress = core.length ? Math.round(core.reduce((s, b) => s + b.progress, 0) / core.length) : 0
+    const status = core.length > 0 && core.every((b) => b.status === 'done') ? ('completed' as const) : t.status
+    return { ...t, branches, progress, status }
+  })
+  return { ...tree, trunks }
 }

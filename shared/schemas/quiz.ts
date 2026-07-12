@@ -14,5 +14,7 @@ export const gradeResponseSchema = z.object({
   score: z.number().min(0).max(1),
   explanations: z.array(z.string()),
   tree: z.unknown().optional(),
+  updated_node_ids: z.array(z.string()).optional(),
 })
 export type PublicQuiz = z.infer<typeof quizResponseSchema>
+export type GradeResponse = z.infer<typeof gradeResponseSchema>

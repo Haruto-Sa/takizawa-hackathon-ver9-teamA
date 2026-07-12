@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { summarizeActivity } from '../lib/api'
 import type { ActivitySummary } from '../../shared/schemas/activity'
-import type { SkillTree } from '../../shared/schemas/tree'
+import type { SkillTreeV2 } from '../../shared/schemas/tree'
+import { allBranches } from '../lib/treeSelectors'
 
-export function ReviewModal({ treeId, tree, onClose }: { treeId: string; tree: SkillTree; onClose: () => void }) {
-  const nodes = tree.milestones.flatMap(m => m.nodes)
-  const done = nodes.filter(n => n.status === 'done')
-  const working = nodes.filter(n => n.status === 'in_progress' || n.status === 'unlocked')
+export function ReviewModal({ treeId, tree, onClose }: { treeId: string; tree: SkillTreeV2; onClose: () => void }) {
+  const branches = allBranches(tree)
+  const done = branches.filter((b) => b.status === 'done')
+  const working = branches.filter((b) => b.status === 'in_progress' || b.status === 'unlocked')
   const [summary, setSummary] = useState<ActivitySummary | null>(null)
   const [busy, setBusy] = useState(true)
   useEffect(() => { summarizeActivity(treeId, tree).then(setSummary).finally(() => setBusy(false)) }, [treeId]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -24,8 +25,11 @@ export function ReviewModal({ treeId, tree, onClose }: { treeId: string; tree: S
     <div className="history-block">
       <span className="block-title">挑戦の履歴</span>
       {done.length === 0 && <p className="muted">まだ習得済みのスキルはありません。クイズに挑戦してみよう！</p>}
-      {done.map(n => <div className="history-row" key={n.id}><strong>✓ {n.label}</strong><small>{n.evidence?.passed_at ? n.evidence.passed_at.slice(0, 10) : ''}{typeof n.evidence?.detail?.score === 'number' ? ` ・ スコア ${Math.round(Number(n.evidence.detail.score) * 100)}%` : ''}</small></div>)}
-      {working.length > 0 && <div className="history-row now"><strong>◆ 取り組み中</strong><small>{working.map(n => n.label).join(' / ')}</small></div>}
+      {done.map(b => {
+        const ev = b.evidence.find((e) => e.type === 'quiz') ?? b.evidence[0]
+        return <div className="history-row" key={b.id}><strong>✓ {b.label}</strong><small>{ev ? ev.created_at.slice(0, 10) : ''}{typeof ev?.score === 'number' ? ` ・ スコア ${Math.round(ev.score * 100)}%` : ''}</small></div>
+      })}
+      {working.length > 0 && <div className="history-row now"><strong>◆ 取り組み中</strong><small>{working.map(b => b.label).join(' / ')}</small></div>}
     </div>
   </div></div>
 }
