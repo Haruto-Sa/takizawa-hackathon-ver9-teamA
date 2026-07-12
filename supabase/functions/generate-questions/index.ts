@@ -1,4 +1,5 @@
 import { handler, json } from '../_shared/http.ts'
-import { requireUser } from '../_shared/auth.ts'
-import { generateStructured, withRetry } from '../_shared/openai.ts'
-Deno.serve(handler(async req=>{try{await requireUser(req);const{goal,tags}=await req.json();if(typeof goal!=='string'||!Array.isArray(tags))return json({error:'invalid_input'},400);try{const result=await withRetry(()=>generateStructured(`目標:${goal}\n経験タグ:${tags.join(',')}\n実名や連絡先を尋ねず、経験を確認する短い追加質問を1〜2問作る。`,'follow_up_questions',{type:'object',additionalProperties:false,required:['questions'],properties:{questions:{type:'array',minItems:1,maxItems:2,items:{type:'string'}}}}));return json(result)}catch{return json({questions:[tags.length?`${tags[0]}を使って、どんなものを作りましたか？`:`${goal}に興味を持ったきっかけは何ですか？`],fallback:true})}}catch{return json({error:'unauthorized'},401)}}))
+import { admin, requireUser } from '../_shared/auth.ts'
+import { runGeneration } from '../_shared/generate.ts'
+import * as questionsPrompt from '../_shared/prompts/generate-questions.ts'
+Deno.serve(handler(async req=>{try{const user=await requireUser(req);const{goal,tags}=await req.json();if(typeof goal!=='string'||!Array.isArray(tags))return json({error:'invalid_input'},400);try{const result=await runGeneration({db:admin(),userId:user.id,functionName:'generate-questions',prompt:questionsPrompt,input:{goal,tags}});return json(result)}catch{return json({questions:[tags.length?`${tags[0]}を使って、どんなものを作りましたか？`:`${goal}に興味を持ったきっかけは何ですか？`],fallback:true})}}catch{return json({error:'unauthorized'},401)}}))
